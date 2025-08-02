@@ -1,0 +1,14 @@
+# 必ず守ること
+
+- タスクを依頼されたら最初に必ずpackage.jsonの内容を確認して仕様ライブラリを把握すること
+- タスクを依頼されたら最初に必ずrepo.mdの内容を確認してMantineの主要コードを把握すること
+- コードコメントは日本語で 既存のコードコメントは指示がない限り変えないこと
+- ビルドエラーを直してとお願いされたら「npm run build」して成功するまで修正とビルドを繰り返すこと
+- なるべくreact純正のhookよりmantine hookを利用すること
+
+# ライブラリ概要
+
+- 言語: TypeScript
+- UI: React v19 Mantine v7
+- hook: mantine hook
+- lint: biome
