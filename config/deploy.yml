@@ -7,7 +7,11 @@ image: thr3a/discord-bot
 # Deploy to these servers.
 servers:
   web:
-    - 192.168.16.12
+    hosts:
+      - 192.168.16.12
+    proxy: false
+    options:
+      health-cmd: "date"
   # job:
   #   hosts:
   #     - 192.168.0.1
@@ -40,15 +44,13 @@ env:
     - DISCORD_BOT_TOKEN
     - DISCORD_CLIENT_ID
     - DISCORD_GUILD_ID
-    - FIREBASE_PROJECT_ID
-    - FIREBASE_CLIENT_EMAIL
-    - FIREBASE_PRIVATE_KEY
+    - FIREBASE_SECRET_JSON
 
 # Aliases are triggered with "bin/kamal <alias>". You can overwrite arguments on invocation:
 # "bin/kamal app logs -r job" will tail logs from the first server in the job section.
 #
-# aliases:
-#   shell: app exec --interactive --reuse "bash"
+aliases:
+  shell: app exec --interactive --reuse "bash"
 
 # Use a different ssh user than root
 ssh:

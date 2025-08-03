@@ -42,27 +42,36 @@ function getEnv(name: string, optional = false): string | undefined {
   return v;
 }
 
-console.log(getEnv('FIREBASE_PRIVATE_KEY'));
-
 const DISCORD_BOT_TOKEN = getEnv('DISCORD_BOT_TOKEN');
 const DISCORD_CLIENT_ID = getEnv('DISCORD_CLIENT_ID');
-const FIREBASE_PROJECT_ID = getEnv('FIREBASE_PROJECT_ID');
-const FIREBASE_CLIENT_EMAIL = getEnv('FIREBASE_CLIENT_EMAIL');
-let FIREBASE_PRIVATE_KEY = getEnv('FIREBASE_PRIVATE_KEY');
-
-if (FIREBASE_PRIVATE_KEY) {
-  FIREBASE_PRIVATE_KEY = FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+const FIREBASE_SECRET_JSON = getEnv('FIREBASE_SECRET_JSON');
+let FIREBASE_SERVICE_ACCOUNT: admin.ServiceAccount | null = null;
+if (FIREBASE_SECRET_JSON) {
+  try {
+    const parsed = JSON.parse(FIREBASE_SECRET_JSON) as {
+      project_id?: string;
+      client_email?: string;
+      private_key?: string;
+      [k: string]: unknown;
+    };
+    FIREBASE_SERVICE_ACCOUNT = {
+      projectId: parsed.project_id ?? '',
+      clientEmail: parsed.client_email ?? '',
+      privateKey: (parsed.private_key ?? '').replace(/\\n/g, '\n')
+    };
+  } catch (e) {
+    console.error('[ENV] FIREBASE_SECRET_JSON の解析に失敗しました:', e);
+  }
 }
 
 let firestore: AdminFirestore | null = null;
 try {
   if (!admin.apps.length) {
+    if (!FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error('FIREBASE_SECRET_JSON が正しく設定されていません。');
+    }
     admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: FIREBASE_PROJECT_ID ?? '',
-        clientEmail: FIREBASE_CLIENT_EMAIL ?? '',
-        privateKey: FIREBASE_PRIVATE_KEY ?? ''
-      } as admin.ServiceAccount)
+      credential: admin.credential.cert(FIREBASE_SERVICE_ACCOUNT as admin.ServiceAccount)
     });
   }
   firestore = admin.firestore();
