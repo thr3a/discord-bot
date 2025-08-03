@@ -4,12 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --import tsx --env-file .env --watch ./src/scripts/hello.ts",
+    "dev": "node --import tsx --env-file .env ./src/scripts/discord.ts",
     "start": "node dist/scripts/hello.js",
     "build": "tsc",
     "lint": "biome check --write ./src"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.0",
+    "@types/node": "^24.1.0",
+    "ai": "^5.0.0",
+    "discord.js": "^14.21.0",
+    "dotenv": "^17.2.1",
+    "firebase": "^12.0.0",
+    "firebase-admin": "^13.4.0",
+    "openai": "^5.11.0",
     "tsx": "^4.20.3"
   },
   "devDependencies": {
