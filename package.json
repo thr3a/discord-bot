@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --import tsx --env-file .env ./src/scripts/discord.ts",
-    "start": "node dist/scripts/discord.js",
+    "start": "node /app/dist/scripts/discord.js",
     "build": "tsc",
     "lint": "biome check --write ./src"
   },
