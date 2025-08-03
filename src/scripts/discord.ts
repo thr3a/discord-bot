@@ -1,11 +1,8 @@
 import 'dotenv/config';
 import {
-  ActionRowBuilder,
   ApplicationCommandType,
   ChannelType,
-  ChatInputCommandInteraction,
   Client,
-  ComponentType,
   EmbedBuilder,
   Events,
   GatewayIntentBits,
@@ -23,7 +20,7 @@ type AdminFirestore = admin.firestore.Firestore;
 
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 // =================== 設定と定数 ===================
 
