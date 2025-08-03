@@ -42,6 +42,8 @@ function getEnv(name: string, optional = false): string | undefined {
   return v;
 }
 
+console.log(getEnv('FIREBASE_PRIVATE_KEY'));
+
 const DISCORD_BOT_TOKEN = getEnv('DISCORD_BOT_TOKEN');
 const DISCORD_CLIENT_ID = getEnv('DISCORD_CLIENT_ID');
 const FIREBASE_PROJECT_ID = getEnv('FIREBASE_PROJECT_ID');
