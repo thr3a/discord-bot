@@ -24,7 +24,11 @@ const ALLOWED_CHANNEL_IDS = new Set<string>(['1005750360301912210']);
 const COLLECTION_CHANNEL_STATES = 'channelStates';
 const COLLECTION_CHANNEL_CONVERSATIONS = 'channelConversations';
 
-// 絵文字リアクション再生成トリガー
+/**
+ * 絵文字リアクション
+ * - 再生成トリガー: BOTメッセージに対する♻️
+ * - 会話巻き戻しトリガー: ユーザーメッセージに対する♻️
+ */
 const REGENERATE_EMOJI = '♻️';
 
 // 直近の会話件数
@@ -66,8 +70,12 @@ try {
 }
 
 type ChannelState = {
-  mode: 'idle' | 'situation_input';
+  mode: 'idle' | 'situation_input' | 'awaiting_reinput';
   situation?: string;
+  // 巻き戻し後に保持する最後のユーザー/アシスタントのDiscordメッセージID
+  // （履歴の切り詰め後、再入力を受けたらこの位置から会話を続ける）
+  rebaseLastUserMessageId?: string | undefined;
+  rebaseLastAssistantMessageId?: string | undefined;
   updatedAt: admin.firestore.FieldValue | admin.firestore.Timestamp;
 };
 
@@ -144,6 +152,54 @@ async function fetchRecentMessages(channelId: string, limit: number): Promise<Co
   } catch (e) {
     console.error('[Firestore] fetchRecentMessages エラー:', e);
     return [];
+  }
+}
+
+/**
+ * 指定したDiscordメッセージID（ユーザー/アシスタント）より後の履歴を削除する
+ * targetUserId または targetAssistantId のいずれかを指定する
+ */
+async function truncateConversationAfter(
+  channelId: string,
+  params: { targetUserId?: string; targetAssistantId?: string }
+): Promise<{ ok: boolean; keptCount: number }> {
+  const col = channelMessagesColRef(channelId);
+  if (!col) return { ok: false, keptCount: 0 };
+  try {
+    const snap = await col.orderBy('createdAt', 'asc').get();
+    const all = snap.docs.map((d: admin.firestore.QueryDocumentSnapshot) => ({
+      id: d.id,
+      data: d.data() as ConversationMessage,
+      ref: d.ref
+    }));
+
+    let cutIndex = -1;
+    if (params.targetUserId) {
+      cutIndex = all.findIndex((x) => x.data.role === 'user' && x.data.discordUserMessageId === params.targetUserId);
+    } else if (params.targetAssistantId) {
+      cutIndex = all.findIndex(
+        (x) => x.data.role === 'assistant' && x.data.discordMessageId === params.targetAssistantId
+      );
+    }
+
+    if (cutIndex === -1) {
+      // 見つからない場合は何もしない
+      return { ok: true, keptCount: all.length };
+    }
+
+    // cutIndex より後を削除
+    const toDelete = all.slice(cutIndex + 1);
+    if (!firestore) return { ok: false, keptCount: 0 };
+    const batchInstance = (firestore as AdminFirestore).batch();
+    for (const doc of toDelete) {
+      batchInstance.delete(doc.ref);
+    }
+    await batchInstance.commit();
+
+    return { ok: true, keptCount: cutIndex + 1 };
+  } catch (e) {
+    console.error('[Firestore] truncateConversationAfter エラー:', e);
+    return { ok: false, keptCount: 0 };
   }
 }
 
@@ -448,6 +504,14 @@ client.on(Events.MessageCreate, async (message: Message) => {
 
     // ここから通常の会話
     await withTyping(message.channel, async () => {
+      // reinput（巻き戻し後の再入力）モード判定
+      const isReinput = state.mode === 'awaiting_reinput';
+
+      if (isReinput) {
+        // モードを idle に戻し、rebase 情報は保持したまま（以降の履歴保存/AI応答に必要ないので消しても良いが、ここでは保持）
+        await setChannelState(message.channelId, { mode: 'idle' });
+      }
+
       // ユーザーメッセージを履歴に保存
       await addConversationMessage(message.channelId, {
         role: 'user',
@@ -492,7 +556,11 @@ client.on(Events.MessageCreate, async (message: Message) => {
   }
 });
 
-// リアクションによる再生成
+/**
+ * リアクション追加イベント
+ * - BOTメッセージに♻️: 既存の「再生成」
+ * - ユーザーメッセージに♻️: 指定メッセージ以降の履歴を削除し、「入力してください」で促し、その後の入力から会話を続行
+ */
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   try {
     // 部分的（Partial）を解決
@@ -505,12 +573,11 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     }
 
     const message = reaction.message as Message<true>;
-    // Bot のメッセージに対する ♻️ のみ対象
-    if (!message.author?.bot) return;
-    if (reaction.emoji.name !== REGENERATE_EMOJI) return;
 
     // チャンネル制限
     if (!ALLOWED_CHANNEL_IDS.has(message.channelId)) return;
+
+    if (reaction.emoji.name !== REGENERATE_EMOJI) return;
 
     // Firestore 必須
     if (!firestore) {
@@ -518,35 +585,58 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       return;
     }
 
-    // コンテキスト構築
-    const ctx = await buildRegenerateContextFromBotMessage(message.channelId, message.id);
-    if (!ctx) {
-      await message.reply('再生成に必要な会話履歴が見つかりませんでした。');
-      return;
-    }
-
-    await withTyping(message.channel, async () => {
-      // AI 呼び出し（対象メッセージ=直前assistantは除外済み）
-      const aiText = await chatWithAI({
-        // exactOptionalPropertyTypes 対応: optional に undefined を渡すのは OK
-        system: ctx.system,
-        history: ctx.messages
-      });
-
-      if (!aiText) {
-        await message.reply(OPENAI_ERROR_MSG);
+    // 分岐: BOTメッセージに対する♻️ => 再生成（既存機能）
+    if (message.author?.bot) {
+      const ctx = await buildRegenerateContextFromBotMessage(message.channelId, message.id);
+      if (!ctx) {
+        await message.reply('再生成に必要な会話履歴が見つかりませんでした。');
         return;
       }
 
-      const sent = await message.reply(aiText);
+      await withTyping(message.channel, async () => {
+        const aiText = await chatWithAI({
+          system: ctx.system,
+          history: ctx.messages
+        });
 
-      // 新しい Bot 応答として保存（今回を最新履歴として追加）
-      await addConversationMessage(message.channelId, {
-        role: 'assistant',
-        content: aiText,
-        discordMessageId: sent.id,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
+        if (!aiText) {
+          await message.reply(OPENAI_ERROR_MSG);
+          return;
+        }
+
+        const sent = await message.reply(aiText);
+
+        // 新しい Bot 応答として保存
+        await addConversationMessage(message.channelId, {
+          role: 'assistant',
+          content: aiText,
+          discordMessageId: sent.id,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
       });
+      return;
+    }
+
+    // 分岐: ユーザーメッセージに対する♻️ => 指定メッセージ以降の履歴を削除し再入力待ちへ
+    // message はユーザー投稿
+    await withTyping(message.channel, async () => {
+      // 指定のユーザー投稿（discordUserMessageId=message.id）以降を削除
+      const result = await truncateConversationAfter(message.channelId, { targetUserId: message.id });
+      if (!result.ok) {
+        await message.reply(FIREBASE_ERROR_MSG);
+        return;
+      }
+
+      // 状態を再入力待ちに遷移（この「入力してください」はDBに保存しない）
+      await setChannelState(message.channelId, {
+        mode: 'awaiting_reinput',
+        rebaseLastUserMessageId: message.id,
+        // exactOptionalPropertyTypes 対応: optional に undefined を許容
+        rebaseLastAssistantMessageId: undefined
+      });
+
+      await message.reply('入力してください');
+      // ここでは返信をDBに入れない（仕様）
     });
   } catch (e) {
     console.error('[MessageReactionAdd] エラー:', e);
