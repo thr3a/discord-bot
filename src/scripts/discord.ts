@@ -38,6 +38,7 @@ function getEnv(name: string, optional = false): string | undefined {
   const v = process.env[name];
   if (!v && !optional) {
     console.error(`[ENV] ${name} が設定されていません`);
+    process.exit(1);
   }
   return v;
 }
@@ -666,10 +667,10 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 // =================== ログイン ===================
 async function main() {
-  if (!DISCORD_BOT_TOKEN) {
-    console.error('DISCORD_BOT_TOKEN が設定されていません。');
-    process.exit(1);
-  }
+  // if (!DISCORD_BOT_TOKEN) {
+  //   console.error('DISCORD_BOT_TOKEN が設定されていません。');
+  //   process.exit(1);
+  // }
   // login 実行前に型ガード
   if (!client) {
     throw new Error('Discord client が初期化されていません。');
