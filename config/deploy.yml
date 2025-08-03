@@ -51,6 +51,7 @@ env:
 #
 aliases:
   shell: app exec --interactive --reuse "bash"
+  logs: app logs -f
 
 # Use a different ssh user than root
 ssh:

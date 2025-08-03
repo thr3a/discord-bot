@@ -16,9 +16,7 @@
     "firebase": "^12.0.0",
     "firebase-admin": "^13.4.0",
     "openai": "^5.11.0",
-    "tsx": "^4.20.3"
-  },
-  "devDependencies": {
+    "tsx": "^4.20.3",
     "@biomejs/biome": "^1.9.4",
     "typescript": "^5.9.2"
   }
