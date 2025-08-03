@@ -15,21 +15,16 @@ import {
 } from 'discord.js';
 
 import admin from 'firebase-admin';
-// 型参照を安定させるため namespace も補完
 type AdminFirestore = admin.firestore.Firestore;
 
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import OpenAI from 'openai';
 
-// =================== 設定と定数 ===================
-
-// 反応対象のチャンネルID（将来拡張に備え、配列で持つ）
 const ALLOWED_CHANNEL_IDS = new Set<string>(['1005750360301912210']);
 
-// Firestore のコレクション/ドキュメント設計
-const COLLECTION_CHANNEL_STATES = 'channelStates'; // channelStates/{channelId}
-const COLLECTION_CHANNEL_CONVERSATIONS = 'channelConversations'; // channelConversations/{channelId}/messages
+const COLLECTION_CHANNEL_STATES = 'channelStates';
+const COLLECTION_CHANNEL_CONVERSATIONS = 'channelConversations';
 
 // 絵文字リアクション再生成トリガー
 const REGENERATE_EMOJI = '♻️';
@@ -37,7 +32,6 @@ const REGENERATE_EMOJI = '♻️';
 // 直近の会話件数
 const HISTORY_LIMIT = 50;
 
-// =================== 環境変数の検証 ===================
 function getEnv(name: string, optional = false): string | undefined {
   const v = process.env[name];
   if (!v && !optional) {
@@ -52,21 +46,19 @@ const FIREBASE_PROJECT_ID = getEnv('FIREBASE_PROJECT_ID');
 const FIREBASE_CLIENT_EMAIL = getEnv('FIREBASE_CLIENT_EMAIL');
 let FIREBASE_PRIVATE_KEY = getEnv('FIREBASE_PRIVATE_KEY');
 
-// PRIVATE_KEY の改行置換
 if (FIREBASE_PRIVATE_KEY) {
   FIREBASE_PRIVATE_KEY = FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
 }
 
-// =================== Firebase Admin 初期化 ===================
 let firestore: AdminFirestore | null = null;
 try {
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert({
-        projectId: FIREBASE_PROJECT_ID,
-        clientEmail: FIREBASE_CLIENT_EMAIL,
-        privateKey: FIREBASE_PRIVATE_KEY
-      })
+        projectId: FIREBASE_PROJECT_ID ?? '',
+        clientEmail: FIREBASE_CLIENT_EMAIL ?? '',
+        privateKey: FIREBASE_PRIVATE_KEY ?? ''
+      } as admin.ServiceAccount)
     });
   }
   firestore = admin.firestore();
@@ -75,9 +67,6 @@ try {
   firestore = null;
 }
 
-// =================== Firestore アクセサ ===================
-
-// チャンネル状態の型
 type ChannelState = {
   mode: 'idle' | 'situation_input';
   situation?: string;
@@ -182,7 +171,7 @@ async function clearConversation(channelId: string): Promise<boolean> {
 async function buildRegenerateContextFromBotMessage(
   channelId: string,
   botMessageId: string
-): Promise<{ system?: string; messages: { role: 'user' | 'assistant'; content: string }[] } | null> {
+): Promise<{ system?: string | undefined; messages: { role: 'user' | 'assistant'; content: string }[] } | null> {
   const state = await getChannelState(channelId);
   const history = await fetchRecentMessages(channelId, HISTORY_LIMIT);
 
@@ -205,7 +194,8 @@ async function buildRegenerateContextFromBotMessage(
   ];
 
   return {
-    system: state?.situation,
+    // exactOptionalPropertyTypes 対応: optional だが undefined を許容する
+    system: state?.situation ?? undefined,
     messages
   };
 }
@@ -225,17 +215,17 @@ const client = new Client({
 const slashCommands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
   {
     name: 'time',
-    description: '現在時刻を返信します（デバッグ用途）',
+    description: '現在時刻を返信します',
     type: ApplicationCommandType.ChatInput
   },
   {
     name: 'init',
-    description: 'シチュエーション入力モードに入ります',
+    description: 'シチュエーション入力モード',
     type: ApplicationCommandType.ChatInput
   },
   {
     name: 'clear',
-    description: '会話履歴を削除します（シチュエーションは保持）',
+    description: '会話履歴を削除します',
     type: ApplicationCommandType.ChatInput
   },
   {
@@ -286,7 +276,8 @@ const OPENAI_ERROR_MSG = 'AIの応答がありませんでした。時間をお�
 
 // 会話を OpenAI に投げる
 async function chatWithAI(params: {
-  system?: string;
+  // exactOptionalPropertyTypes 対応: optional プロパティは undefined を明示許容
+  system?: string | undefined;
   history: { role: 'user' | 'assistant'; content: string }[];
   latestUser?: { content: string };
 }): Promise<string | null> {
@@ -460,6 +451,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
 
       // AI呼び出し
       const aiText = await chatWithAI({
+        // exactOptionalPropertyTypes 対応: optional に undefined を渡すのは OK
         system: (state as ChannelState).situation,
         history,
         latestUser: { content: message.content }
@@ -526,6 +518,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     await withTyping(message.channel, async () => {
       // AI 呼び出し（対象メッセージ=直前assistantは除外済み）
       const aiText = await chatWithAI({
+        // exactOptionalPropertyTypes 対応: optional に undefined を渡すのは OK
         system: ctx.system,
         history: ctx.messages
       });

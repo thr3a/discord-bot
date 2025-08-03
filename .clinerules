@@ -7,3 +7,4 @@
 
 - 言語: TypeScript
 - lint: biome
+- nodejs v22
