@@ -17,8 +17,6 @@ import {
 import admin from 'firebase-admin';
 type AdminFirestore = admin.firestore.Firestore;
 
-import { createOpenAI } from '@ai-sdk/openai';
-import { generateText } from 'ai';
 import OpenAI from 'openai';
 
 const ALLOWED_CHANNEL_IDS = new Set<string>(['1005750360301912210']);
@@ -274,7 +272,10 @@ const FIREBASE_ERROR_MSG = '現在、データベースに接続できません�
 // OpenAI エラーメッセージ
 const OPENAI_ERROR_MSG = 'AIの応答がありませんでした。時間をおいて再度お試しください。';
 
-// 会話を OpenAI に投げる
+/**
+ * 会話を OpenAI (official SDK) に投げる
+ * @returns 生成テキスト / null
+ */
 async function chatWithAI(params: {
   // exactOptionalPropertyTypes 対応: optional プロパティは undefined を明示許容
   system?: string | undefined;
@@ -282,33 +283,42 @@ async function chatWithAI(params: {
   latestUser?: { content: string };
 }): Promise<string | null> {
   try {
-    const messages: { role: 'user' | 'assistant'; content: { type: 'text'; text: string }[] }[] = [];
+    // OpenAI クライアント。環境によってはプロキシ/互換APIを使うため baseURL を指定
+    // 既存コードで使っていた互換APIエンドポイントを維持
+    const client = new OpenAI({
+      baseURL: 'http://192.168.16.20:8000/v1',
+      apiKey: 'dummy'
+    });
+
+    // Chat Completions 形式へ変換
+    const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+
+    const system = params.system?.trim();
+    messages.push({
+      role: 'system',
+      content: system && system.length > 0 ? system : 'You are a helpful chatbot.'
+    });
 
     for (const m of params.history) {
       messages.push({
         role: m.role,
-        content: [{ type: 'text', text: m.content }]
+        content: m.content
       });
     }
     if (params.latestUser) {
       messages.push({
         role: 'user',
-        content: [{ type: 'text', text: params.latestUser.content }]
+        content: params.latestUser.content
       });
     }
 
-    const openai = createOpenAI({
-      baseURL: 'http://192.168.16.20:8000/v1'
+    const completion = await client.chat.completions.create({
+      model: 'main', // 互換サーバ側で "main" などにマッピングしている場合は適宜変更
+      messages,
+      max_tokens: 1024
     });
 
-    const result = await generateText({
-      model: openai.chat('main'),
-      maxOutputTokens: 1024,
-      system: params.system || 'You are a helpful chatbot.',
-      messages
-    });
-
-    return result.text || '';
+    return completion.choices[0]?.message?.content ?? '';
   } catch (e) {
     console.error('[OpenAI] エラー:', e);
     return null;
