@@ -31,14 +31,15 @@ export function handleRecycleActionOnAssistantLogic(
   history: ConversationMessage[],
   targetAssistantDiscordMessageId: string
 ): {
-  nextMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> | null;
+  nextMessages: Array<{ role: 'user' | 'assistant'; content: string }> | null;
+  deleteFromDiscordMessageId: string | null;
 } {
   // 昇順リストから対象assistant発言のインデックスを探す
   const idx = history.findIndex(
     (h) => h.role === 'assistant' && h.discordMessageId === targetAssistantDiscordMessageId
   );
   if (idx === -1) {
-    return { nextMessages: null };
+    return { nextMessages: null, deleteFromDiscordMessageId: null };
   }
 
   // 例に基づき、対象 assistant 発言と、それ以降（= idx 以降）は削除し、手前の文脈のみで再生成
@@ -52,7 +53,7 @@ export function handleRecycleActionOnAssistantLogic(
   }>;
 
   // 呼出側で system を付与しやすいように user/assistant 配列として返す（ここでは system を含めない）
-  return { nextMessages: nextMessages as unknown as Array<{ role: 'system' | 'user' | 'assistant'; content: string }> };
+  return { nextMessages, deleteFromDiscordMessageId: targetAssistantDiscordMessageId };
 }
 
 // ♻️がユーザーメッセージに付いたときの削除範囲を決める純関数

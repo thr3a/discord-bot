@@ -282,10 +282,14 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   if (msg.author?.bot) {
     // BOTメッセージの再生成
     const history = await getRecentConversation(firestore, channelId, MAX_HISTORY);
-    const { nextMessages } = handleRecycleActionOnAssistantLogic(history, msg.id);
-    if (!nextMessages) return;
+    const { nextMessages, deleteFromDiscordMessageId } = handleRecycleActionOnAssistantLogic(history, msg.id);
+    if (!nextMessages || !deleteFromDiscordMessageId) return;
+
+    // DBから対象メッセージ以降を削除
+    await deleteConversationsAfterDiscordMessageId(firestore, channelId, deleteFromDiscordMessageId);
 
     const system = (await getChannelState(firestore, channelId))?.situation ?? DEFAULT_SYSTEM_PROMPT;
+    const payload = buildChatCompletionMessages(system, nextMessages as ConversationMessage[]);
 
     try {
       await (msg.channel as TextChannel).sendTyping();
@@ -294,7 +298,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     try {
       const res = await openai.chat.completions.create({
         model: 'main',
-        messages: nextMessages
+        messages: payload
       });
       const content = res.choices?.[0]?.message?.content ?? '';
       const reply = await (msg.channel as TextChannel).send(content || '(empty)');

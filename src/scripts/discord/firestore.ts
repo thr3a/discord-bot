@@ -141,7 +141,8 @@ export async function deleteConversationsAfterDiscordMessageId(
   if (idx === -1) return; // 見つからない場合は何もしない
 
   const batch = db.batch();
-  for (let i = idx + 1; i < docs.length; i++) {
+  // idx 以降のすべてのドキュメントを削除対象に
+  for (let i = idx; i < docs.length; i++) {
     const ref = docs[i]?.ref;
     // 型安全のため存在チェック
     if (ref) {
