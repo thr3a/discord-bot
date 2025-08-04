@@ -2,7 +2,7 @@
 // テスト容易性のため、ここは Discord / OpenAI に依存しない。
 
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
-import { FieldValue, type Firestore, Timestamp, getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore, getFirestore } from 'firebase-admin/firestore';
 import type { ChannelState, ConversationMessage } from './types.js';
 
 // サービスアカウントJSON文字列の \n を改行へ正規化

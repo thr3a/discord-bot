@@ -9,12 +9,7 @@ import {
   setChannelSituation,
   withFirestoreOrNull
 } from '@/scripts/discord/firestore.js';
-import {
-  buildChatCompletionMessages,
-  decideNextStateOnSlashOrLeadingSlash,
-  handleRecycleActionOnAssistantLogic,
-  handleRecycleActionOnUserLogic
-} from '@/scripts/discord/logic.js';
+import { buildChatCompletionMessages, handleRecycleActionOnAssistantLogic } from '@/scripts/discord/logic.js';
 import {
   ALLOWED_CHANNEL_IDS,
   type ChannelState,
@@ -28,7 +23,6 @@ import {
 import {
   ChannelType,
   Client,
-  Collection,
   EmbedBuilder,
   Events,
   GatewayIntentBits,
@@ -319,7 +313,6 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   }
 });
 
-// ログイン
 client.login(DISCORD_BOT_TOKEN).catch((e) => {
   console.error('Discord ログイン失敗:', e);
   process.exit(1);
