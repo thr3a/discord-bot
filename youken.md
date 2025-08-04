@@ -20,6 +20,16 @@
   - /init: シチュエーション入力モードへ遷移
   - /clear: 会話履歴のみを削除（シチュエーションは保持）
   - /show: 現在登録されているシチュエーションをエンベッドで表示
+  - /debug: 次に API に投げるべき会話一覧を簡易表示（各行 20 文字でカット）
+    - Firestore から直近履歴（最大50件）とチャンネルのシチュエーションを取得
+    - buildChatCompletionMessages(system, history) で API に送る messages を構築（system/user/assistant を含む）
+    - 各 message を「- role: 先頭20文字（21文字以上は … を付与）」形式で1行に整形
+      - 行内の改行はスペースに置換して1行化
+      - 例: 
+        - - assistant: こんにちは……
+        - - user: 元気？
+        - - assistant: 両親や友だちが息…
+    - Discord への表示はエンベッド（ephemeral=true）
 - 通常メッセージに反応して会話する
   - 許可チャンネル内のユーザー投稿のみ処理
   - "/" 始まりのメッセージは会話処理対象外とし、シチュエーション入力モードを破棄（idleへ）

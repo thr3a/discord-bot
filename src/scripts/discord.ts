@@ -83,7 +83,10 @@ const commands = [
   new SlashCommandBuilder().setName('time').setDescription('現在時刻（Asia/Tokyo）を返す'),
   new SlashCommandBuilder().setName('init').setDescription('シチュエーション入力モードへ遷移'),
   new SlashCommandBuilder().setName('clear').setDescription('会話履歴のみを削除（シチュエーションは保持）'),
-  new SlashCommandBuilder().setName('show').setDescription('現在登録されているシチュエーションを表示')
+  new SlashCommandBuilder().setName('show').setDescription('現在登録されているシチュエーションを表示'),
+  new SlashCommandBuilder()
+    .setName('debug')
+    .setDescription('次にAPIに投げるべき会話一覧を箇条書き表示（各20文字でカット）')
 ].map((c) => c.toJSON());
 
 // コマンド登録
@@ -155,6 +158,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     const embed = new EmbedBuilder().setTitle('現在のシチュエーション').setDescription(situation).setColor(0x00ae86);
     await interaction.reply({ embeds: [embed] });
+    return;
+  }
+
+  if (interaction.commandName === 'debug') {
+    // Firestore がない場合はエラー応答
+    if (!firestore) {
+      await interaction.reply(FALLBACK_FIRESTORE_ERROR);
+      return;
+    }
+    // 直近履歴とシステムを取得し、実際にAPIへ投げる messages を構築
+    const state = await getChannelState(firestore, channel.id);
+    const history = await getRecentConversation(firestore, channel.id, MAX_HISTORY);
+    const system = state?.situation ?? DEFAULT_SYSTEM_PROMPT;
+    const messages = buildChatCompletionMessages(system, history);
+
+    // 各行を「- role: 先頭20文字（超過時は…）」で1行に整形（行内改行は削除）
+    const toOneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').trim();
+    const clip = (s: string) => (s.length > 20 ? `${s.slice(0, 20)}…` : s);
+    const lines = messages.map((m) => `- ${m.role}: ${clip(toOneLine(m.content))}`);
+
+    const description = lines.join('\n') || '(empty)';
+
+    const embed = new EmbedBuilder().setTitle('次にAPIに投げる会話一覧').setDescription(description).setColor(0x888888);
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
     return;
   }
 });
