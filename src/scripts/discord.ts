@@ -1,26 +1,4 @@
 import {
-  deleteAllConversations,
-  deleteConversationsAfterDiscordMessageId,
-  getChannelState,
-  getRecentConversation,
-  saveAssistantMessage,
-  saveUserMessage,
-  setChannelMode,
-  setChannelSituation,
-  withFirestoreOrNull
-} from '@/scripts/discord/firestore.js';
-import { buildChatCompletionMessages, handleRecycleActionOnAssistantLogic } from '@/scripts/discord/logic.js';
-import {
-  ALLOWED_CHANNEL_IDS,
-  type ChannelState,
-  type ConversationMessage,
-  DEFAULT_SYSTEM_PROMPT,
-  FALLBACK_FIRESTORE_ERROR,
-  FALLBACK_OPENAI_ERROR,
-  MAX_HISTORY,
-  RECYCLE_EMOJI
-} from '@/scripts/discord/types.js';
-import {
   ChannelType,
   Client,
   EmbedBuilder,
@@ -34,6 +12,28 @@ import {
 } from 'discord.js';
 import { config as dotenvConfig } from 'dotenv';
 import OpenAI from 'openai';
+import {
+  deleteAllConversations,
+  deleteConversationsAfterDiscordMessageId,
+  getChannelState,
+  getRecentConversation,
+  saveAssistantMessage,
+  saveUserMessage,
+  setChannelMode,
+  setChannelSituation,
+  withFirestoreOrNull
+} from './discord/firestore.js';
+import { buildChatCompletionMessages, handleRecycleActionOnAssistantLogic } from './discord/logic.js';
+import {
+  ALLOWED_CHANNEL_IDS,
+  type ChannelState,
+  type ConversationMessage,
+  DEFAULT_SYSTEM_PROMPT,
+  FALLBACK_FIRESTORE_ERROR,
+  FALLBACK_OPENAI_ERROR,
+  MAX_HISTORY,
+  RECYCLE_EMOJI
+} from './discord/types.js';
 
 dotenvConfig();
 
