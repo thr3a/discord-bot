@@ -38,13 +38,7 @@ import OpenAI from 'openai';
 dotenvConfig();
 
 // 環境変数検証
-const {
-  DISCORD_BOT_TOKEN,
-  DISCORD_CLIENT_ID,
-  FIREBASE_SECRET_JSON,
-  OPENAI_API_BASE = 'http://192.168.16.20:8000/v1',
-  OPENAI_API_KEY = 'sk-dummy'
-} = process.env;
+const { DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, FIREBASE_SECRET_JSON } = process.env;
 
 if (!DISCORD_BOT_TOKEN || !DISCORD_CLIENT_ID) {
   // 必須環境変数がない場合は即時終了
@@ -57,8 +51,8 @@ const firestore = await withFirestoreOrNull(FIREBASE_SECRET_JSON);
 
 // OpenAI クライアント初期化
 const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY,
-  baseURL: OPENAI_API_BASE
+  apiKey: 'sk-dummy',
+  baseURL: 'http://192.168.16.20:8000/v1'
 });
 
 // Discord クライアント初期化
@@ -74,13 +68,11 @@ const client = new Client({
 
 // スラッシュコマンド定義
 const commands = [
-  new SlashCommandBuilder().setName('time').setDescription('現在時刻（Asia/Tokyo）を返す'),
+  new SlashCommandBuilder().setName('time').setDescription('現在時刻を返す'),
   new SlashCommandBuilder().setName('init').setDescription('シチュエーション入力モードへ遷移'),
-  new SlashCommandBuilder().setName('clear').setDescription('会話履歴のみを削除（シチュエーションは保持）'),
+  new SlashCommandBuilder().setName('clear').setDescription('会話履歴を削除（シチュエーションは保持）'),
   new SlashCommandBuilder().setName('show').setDescription('現在登録されているシチュエーションを表示'),
-  new SlashCommandBuilder()
-    .setName('debug')
-    .setDescription('次にAPIに投げるべき会話一覧を箇条書き表示（各20文字でカット）')
+  new SlashCommandBuilder().setName('debug').setDescription('会話一覧を箇条書き表示')
 ].map((c) => c.toJSON());
 
 // コマンド登録
@@ -89,7 +81,7 @@ client.once(Events.ClientReady, async (c) => {
   const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN);
   try {
     await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID), { body: commands });
-    console.log('スラッシュコマンドを同期しました。');
+    console.log('スラッシュコマンドを同期しました');
   } catch (e) {
     console.error('スラッシュコマンド同期に失敗:', e);
   }
@@ -109,7 +101,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   const channel = interaction.channel;
   if (!channel || channel?.type !== ChannelType.GuildText) {
-    await interaction.reply({ content: 'このチャンネルタイプでは動作しません。', ephemeral: true });
+    await interaction.reply({ content: 'このチャンネルタイプでは動作しません', ephemeral: true });
     return;
   }
 
@@ -124,6 +116,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply(FALLBACK_FIRESTORE_ERROR);
       return;
     }
+    await deleteAllConversations(firestore, channel.id);
     await setChannelMode(firestore, channel.id, 'situation_input');
     await interaction.reply('シチュエーションを入力してください');
     return;
@@ -195,7 +188,7 @@ client.on(Events.MessageCreate, async (message) => {
   }
 
   if (!firestore) {
-    await message.reply(FALLBACK_FIRESTORE_ERROR);
+    await (message.channel as TextChannel).send(FALLBACK_FIRESTORE_ERROR);
     return;
   }
 
@@ -205,7 +198,7 @@ client.on(Events.MessageCreate, async (message) => {
     // 受信本文をシチュエーションとして保存、状態 idle
     await setChannelSituation(firestore, message.channelId, message.content);
     await setChannelMode(firestore, message.channelId, 'idle');
-    await message.reply('シチュエーションを登録しました。会話を開始できます。');
+    await (message.channel as TextChannel).send('シチュエーションを登録しました。会話を開始できます。');
     return;
   }
 
@@ -238,16 +231,16 @@ client.on(Events.MessageCreate, async (message) => {
       messages: payload
     });
     const content = res.choices?.[0]?.message?.content ?? '';
-    const reply = await message.reply(content || '(empty)');
+    const sent = await (message.channel as TextChannel).send(content || '(empty)');
     // BOT 応答を保存
     await saveAssistantMessage(firestore, message.channelId, {
       role: 'assistant',
       content: content,
-      discordMessageId: reply.id
+      discordMessageId: sent.id
     });
   } catch (e) {
     console.error(e);
-    await message.reply(FALLBACK_OPENAI_ERROR);
+    await (message.channel as TextChannel).send(FALLBACK_OPENAI_ERROR);
   }
 });
 
