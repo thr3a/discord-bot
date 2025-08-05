@@ -10,14 +10,10 @@ function normalizePrivateKey(input: string): string {
   return input.replace(/\\n/g, '\n');
 }
 
-// Firestore 初期化。失敗時は null を返す。
-export async function withFirestoreOrNull(secretJson?: string): Promise<Firestore | null> {
+// Firestore 初期化。失敗時はプロセスを終了する。
+export async function withFirestore(secretJson: string): Promise<Firestore> {
   try {
     if (!getApps().length) {
-      if (!secretJson) {
-        // 環境変数未指定なら Firestore 未接続扱い
-        throw new Error('FIREBASE_SECRET_JSON is not provided');
-      }
       const svc = JSON.parse(secretJson);
       if (svc.private_key) {
         svc.private_key = normalizePrivateKey(svc.private_key);
@@ -29,7 +25,7 @@ export async function withFirestoreOrNull(secretJson?: string): Promise<Firestor
     return getFirestore();
   } catch (e) {
     console.error('Firestore 初期化に失敗:', e);
-    return null;
+    process.exit(1);
   }
 }
 

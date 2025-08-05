@@ -21,7 +21,7 @@ import {
   saveUserMessage,
   setChannelMode,
   setChannelSituation,
-  withFirestoreOrNull
+  withFirestore
 } from './discord/firestore.js';
 import { buildChatCompletionMessages, handleRecycleActionOnAssistantLogic } from './discord/logic.js';
 import {
@@ -37,17 +37,15 @@ import {
 
 dotenvConfig();
 
-// 環境変数検証
 const { DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, FIREBASE_SECRET_JSON } = process.env;
 
-if (!DISCORD_BOT_TOKEN || !DISCORD_CLIENT_ID) {
-  // 必須環境変数がない場合は即時終了
-  console.error('環境変数 DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID は必須です。');
+if (!DISCORD_BOT_TOKEN || !DISCORD_CLIENT_ID || !FIREBASE_SECRET_JSON) {
+  console.error('環境変数は必須です。');
   process.exit(1);
 }
 
-// Firestore 初期化（失敗しても null を返す設計）
-const firestore = await withFirestoreOrNull(FIREBASE_SECRET_JSON);
+// Firestore 初期化
+const firestore = await withFirestore(FIREBASE_SECRET_JSON);
 
 // OpenAI クライアント初期化
 const openai = new OpenAI({
@@ -112,10 +110,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'init') {
-    if (!firestore) {
-      await interaction.reply(FALLBACK_FIRESTORE_ERROR);
-      return;
-    }
     await deleteAllConversations(firestore, channel.id);
     await setChannelMode(firestore, channel.id, 'situation_input');
     await interaction.reply('シチュエーションを入力してください');
@@ -123,20 +117,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'clear') {
-    if (!firestore) {
-      await interaction.reply(FALLBACK_FIRESTORE_ERROR);
-      return;
-    }
     await deleteAllConversations(firestore, channel.id);
     await interaction.reply('過去の会話を削除しました。シチュエーションは維持されます。');
     return;
   }
 
   if (interaction.commandName === 'show') {
-    if (!firestore) {
-      await interaction.reply(FALLBACK_FIRESTORE_ERROR);
-      return;
-    }
     const state = await getChannelState(firestore, channel.id);
     const situation = state?.situation;
     if (!situation) {
@@ -149,11 +135,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.commandName === 'debug') {
-    // Firestore がない場合はエラー応答
-    if (!firestore) {
-      await interaction.reply(FALLBACK_FIRESTORE_ERROR);
-      return;
-    }
     // 直近履歴とシステムを取得し、実際にAPIへ投げる messages を構築
     const state = await getChannelState(firestore, channel.id);
     const history = await getRecentConversation(firestore, channel.id, MAX_HISTORY);
@@ -181,14 +162,7 @@ client.on(Events.MessageCreate, async (message) => {
 
   // "/" 始まりは会話対象外かつ idle へ
   if (message.content.startsWith('/')) {
-    if (firestore) {
-      await setChannelMode(firestore, message.channelId, 'idle');
-    }
-    return;
-  }
-
-  if (!firestore) {
-    await (message.channel as TextChannel).send(FALLBACK_FIRESTORE_ERROR);
+    await setChannelMode(firestore, message.channelId, 'idle');
     return;
   }
 
@@ -256,12 +230,6 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   const msg = reaction.message;
   if (!isAllowedChannel(msg.channelId)) return;
   if (reaction.emoji.name !== RECYCLE_EMOJI) return;
-  if (!firestore) {
-    if (msg.channel) {
-      await (msg.channel as TextChannel).send(FALLBACK_FIRESTORE_ERROR);
-    }
-    return;
-  }
 
   const channelId = msg.channelId;
 
