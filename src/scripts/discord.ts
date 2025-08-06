@@ -1,3 +1,5 @@
+import { createOpenAI } from '@ai-sdk/openai';
+import { generateText } from 'ai';
 import {
   ChannelType,
   Client,
@@ -11,7 +13,6 @@ import {
   type TextChannel
 } from 'discord.js';
 import { config as dotenvConfig } from 'dotenv';
-import OpenAI from 'openai';
 import {
   deleteAllConversations,
   deleteConversationsAfterDiscordMessageId,
@@ -29,7 +30,6 @@ import {
   type ChannelState,
   type ConversationMessage,
   DEFAULT_SYSTEM_PROMPT,
-  FALLBACK_FIRESTORE_ERROR,
   FALLBACK_OPENAI_ERROR,
   MAX_HISTORY,
   RECYCLE_EMOJI
@@ -48,9 +48,9 @@ if (!DISCORD_BOT_TOKEN || !DISCORD_CLIENT_ID || !FIREBASE_SECRET_JSON) {
 const firestore = await withFirestore(FIREBASE_SECRET_JSON);
 
 // OpenAI クライアント初期化
-const openai = new OpenAI({
-  apiKey: 'sk-dummy',
-  baseURL: 'http://192.168.16.20:8000/v1'
+const openai = createOpenAI({
+  baseURL: 'http://192.168.16.20:8000/v1',
+  apiKey: 'sk-dummy'
 });
 
 // Discord クライアント初期化
@@ -200,16 +200,17 @@ client.on(Events.MessageCreate, async (message) => {
   // OpenAI へ
   const payload = buildChatCompletionMessages(system, history);
   try {
-    const res = await openai.chat.completions.create({
-      model: 'main',
-      messages: payload
+    const res = await generateText({
+      model: openai.chat('main'),
+      maxOutputTokens: 512,
+      messages: payload,
+      temperature: 1
     });
-    const content = res.choices?.[0]?.message?.content ?? '';
-    const sent = await (message.channel as TextChannel).send(content || '(empty)');
+    const sent = await (message.channel as TextChannel).send(res.text || '(empty)');
     // BOT 応答を保存
     await saveAssistantMessage(firestore, message.channelId, {
       role: 'assistant',
-      content: content,
+      content: res.text,
       discordMessageId: sent.id
     });
   } catch (e) {
@@ -251,15 +252,15 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     } catch {}
 
     try {
-      const res = await openai.chat.completions.create({
-        model: 'main',
+      const res = await generateText({
+        model: openai.chat('main'),
+        maxOutputTokens: 1024,
         messages: payload
       });
-      const content = res.choices?.[0]?.message?.content ?? '';
-      const reply = await (msg.channel as TextChannel).send(content || '(empty)');
+      const reply = await (msg.channel as TextChannel).send(res.text || '(empty)');
       await saveAssistantMessage(firestore, channelId, {
         role: 'assistant',
-        content,
+        content: res.text,
         discordMessageId: reply.id
       });
     } catch (e) {
