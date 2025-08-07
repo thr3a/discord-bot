@@ -1,4 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
+import { perplexity } from '@ai-sdk/perplexity';
 import { generateText } from 'ai';
 import {
   ChannelType,
@@ -36,6 +37,12 @@ import {
 } from './discord/types.js';
 
 dotenvConfig();
+
+const OPENAI_CHANNEL_ID = '1005750360301912210';
+const PERPLEXITY_CHANNEL_ID = '1402473447715766272';
+ALLOWED_CHANNEL_IDS.clear();
+ALLOWED_CHANNEL_IDS.add(OPENAI_CHANNEL_ID);
+ALLOWED_CHANNEL_IDS.add(PERPLEXITY_CHANNEL_ID);
 
 const { DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, FIREBASE_SECRET_JSON } = process.env;
 
@@ -155,6 +162,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
+async function generateReplyTextByChannel(
+  channelId: string,
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+): Promise<string> {
+  if (channelId === PERPLEXITY_CHANNEL_ID) {
+    const { text } = await generateText({
+      model: perplexity('sonar'),
+      messages,
+      maxOutputTokens: 512,
+      temperature: 1
+    });
+    return text;
+  }
+
+  const { text } = await generateText({
+    model: openai.chat('main'),
+    maxOutputTokens: 512,
+    messages,
+    temperature: 1
+  });
+  return text;
+}
+
 // 通常メッセージ
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
@@ -197,20 +227,16 @@ client.on(Events.MessageCreate, async (message) => {
     await message.channel.sendTyping();
   } catch {}
 
-  // OpenAI へ
+  // 返信生成（チャンネル別に OpenAI / Perplexity を切替）
   const payload = buildChatCompletionMessages(system, history);
   try {
-    const res = await generateText({
-      model: openai.chat('main'),
-      maxOutputTokens: 512,
-      messages: payload,
-      temperature: 1
-    });
-    const sent = await (message.channel as TextChannel).send(res.text || '(empty)');
-    // BOT 応答を保存
+    const text = await generateReplyTextByChannel(message.channelId, payload);
+    const replyText = text || '(empty)';
+    const sent = await (message.channel as TextChannel).send(replyText);
+    // BOT 応答を保存（チャンネルIDで Firestore が分離されるためデータは排他的）
     await saveAssistantMessage(firestore, message.channelId, {
       role: 'assistant',
-      content: res.text,
+      content: replyText,
       discordMessageId: sent.id
     });
   } catch (e) {
@@ -252,15 +278,12 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     } catch {}
 
     try {
-      const res = await generateText({
-        model: openai.chat('main'),
-        maxOutputTokens: 1024,
-        messages: payload
-      });
-      const reply = await (msg.channel as TextChannel).send(res.text || '(empty)');
+      const text = await generateReplyTextByChannel(channelId, payload);
+      const replyText = text || '(empty)';
+      const reply = await (msg.channel as TextChannel).send(replyText);
       await saveAssistantMessage(firestore, channelId, {
         role: 'assistant',
-        content: res.text,
+        content: replyText,
         discordMessageId: reply.id
       });
     } catch (e) {
