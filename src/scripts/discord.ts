@@ -136,8 +136,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply('現在登録されているシチュエーションはありません。/init で登録できます。');
       return;
     }
-    const embed = new EmbedBuilder().setTitle('現在のシチュエーション').setDescription(situation).setColor(0x00ae86);
-    await interaction.reply({ embeds: [embed] });
+    // const embed = new EmbedBuilder().setTitle('現在のシチュエーション').setDescription(situation).setColor(0x00ae86);
+    await interaction.reply(situation);
     return;
   }
 
