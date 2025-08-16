@@ -1,6 +1,5 @@
-// 型定義や定数を集約
-
-export type Mode = 'idle' | 'situation_input' | 'awaiting_reinput';
+import { z } from 'zod';
+export type Mode = 'idle' | 'situation_input' | 'awaiting_reinput' | 'prompt_situation_input';
 
 export type ConversationRole = 'user' | 'assistant';
 
@@ -52,3 +51,14 @@ export const MAX_HISTORY = 10;
 
 // リアクションで使用する絵文字
 export const RECYCLE_EMOJI = '♻️';
+export const OK_EMOJI = '🆗';
+
+export const ConversationSchema = z.object({
+  line: z.string().describe('セリフ'),
+  action: z.string().describe('動作・情景描写'),
+  character: z.object({
+    name: z.string().describe('キャラクターの名前'),
+    outfit: z.string().describe('現在の服装'),
+    emotion: z.string().describe('感情')
+  })
+});

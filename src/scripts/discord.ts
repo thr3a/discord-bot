@@ -26,6 +26,7 @@ import {
   withFirestore
 } from './discord/firestore.js';
 import { buildChatCompletionMessages, handleRecycleActionOnAssistantLogic } from './discord/logic.js';
+import { handlePromptCommand, handlePromptSituationInput } from './discord/prompt.js';
 import {
   ALLOWED_CHANNEL_IDS,
   type ChannelState,
@@ -33,6 +34,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   FALLBACK_OPENAI_ERROR,
   MAX_HISTORY,
+  OK_EMOJI,
   RECYCLE_EMOJI
 } from './discord/types.js';
 
@@ -78,7 +80,8 @@ const commands = [
   new SlashCommandBuilder().setName('init').setDescription('シチュエーション入力モードへ遷移'),
   new SlashCommandBuilder().setName('clear').setDescription('会話履歴を削除（シチュエーションは保持）'),
   new SlashCommandBuilder().setName('show').setDescription('現在登録されているシチュエーションを表示'),
-  new SlashCommandBuilder().setName('debug').setDescription('会話一覧を箇条書き表示')
+  new SlashCommandBuilder().setName('debug').setDescription('会話一覧を箇条書き表示'),
+  new SlashCommandBuilder().setName('prompt').setDescription('シチュエーションを拡張するプロンプトを生成')
 ].map((c) => c.toJSON());
 
 // コマンド登録
@@ -161,6 +164,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await interaction.reply({ embeds: [embed], ephemeral: true });
     return;
   }
+
+  if (interaction.commandName === 'prompt') {
+    await handlePromptCommand(firestore, interaction);
+    return;
+  }
 });
 
 async function generateReplyTextByChannel(
@@ -204,6 +212,11 @@ client.on(Events.MessageCreate, async (message) => {
     await setChannelSituation(firestore, message.channelId, message.content);
     await setChannelMode(firestore, message.channelId, 'idle');
     await (message.channel as TextChannel).send('シチュエーションを登録しました。会話を開始できます。');
+    return;
+  }
+
+  if (channelState.mode === 'prompt_situation_input') {
+    await handlePromptSituationInput(firestore, message);
     return;
   }
 
@@ -257,9 +270,20 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   }
   const msg = reaction.message;
   if (!isAllowedChannel(msg.channelId)) return;
-  if (reaction.emoji.name !== RECYCLE_EMOJI) return;
 
   const channelId = msg.channelId;
+
+  // 🆗 リアクション: プロンプトをシチュエーションとして保存
+  if (reaction.emoji.name === OK_EMOJI && msg.author?.bot) {
+    if (msg.content && msg.channel.type === ChannelType.GuildText) {
+      await setChannelSituation(firestore, channelId, msg.content);
+      await msg.channel.send('プロンプトをシチュエーションとして保存しました。');
+    }
+    return;
+  }
+
+  // ♻️ リアクション: 再生成または巻き戻し
+  if (reaction.emoji.name !== RECYCLE_EMOJI) return;
 
   // 対象が BOT メッセージ or ユーザーメッセージで分岐
   if (msg.author?.bot) {
