@@ -40,6 +40,7 @@ dotenvConfig();
 
 const OPENAI_CHANNEL_ID = '1005750360301912210';
 const PERPLEXITY_CHANNEL_ID = '1402473447715766272';
+const MODEL_ID = 'cpu';
 ALLOWED_CHANNEL_IDS.clear();
 ALLOWED_CHANNEL_IDS.add(OPENAI_CHANNEL_ID);
 ALLOWED_CHANNEL_IDS.add(PERPLEXITY_CHANNEL_ID);
@@ -177,10 +178,10 @@ async function generateReplyTextByChannel(
   }
 
   const { text } = await generateText({
-    model: openai.chat('main'),
+    model: openai.chat('cpu'),
     maxOutputTokens: 512,
     messages,
-    temperature: 1
+    temperature: 1,
   });
   return text;
 }
