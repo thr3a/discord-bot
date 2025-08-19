@@ -8,7 +8,7 @@ import { schema, systemPrompt } from './prompt-schema.js';
 import { OK_EMOJI } from './types.js';
 
 const openai = createOpenAI({
-  baseURL: 'http://192.168.16.20:8002/v1',
+  baseURL: 'http://192.168.16.20:8000/v1',
   apiKey: 'sk-dummy'
 });
 

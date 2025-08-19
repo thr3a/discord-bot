@@ -47,7 +47,7 @@ export const ALLOWED_CHANNEL_IDS: Set<string> = new Set([
 ]);
 
 // 直近履歴最大利用件数
-export const MAX_HISTORY = 10;
+export const MAX_HISTORY = 20;
 
 // リアクションで使用する絵文字
 export const RECYCLE_EMOJI = '♻️';

@@ -189,7 +189,7 @@ async function generateReplyTextByChannel(
     model: openai.chat('cpu'),
     maxOutputTokens: 512,
     messages,
-    temperature: 1,
+    temperature: 1
   });
   return text;
 }
@@ -276,6 +276,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   // 🆗 リアクション: プロンプトをシチュエーションとして保存
   if (reaction.emoji.name === OK_EMOJI && msg.author?.bot) {
     if (msg.content && msg.channel.type === ChannelType.GuildText) {
+      await deleteAllConversations(firestore, channelId);
       await setChannelSituation(firestore, channelId, msg.content);
       await msg.channel.send('プロンプトをシチュエーションとして保存しました。');
     }
