@@ -2,14 +2,17 @@
 // ここは vitest で単体テスト可能な純関数のみを置く
 
 import type { ConversationMessage } from './types.js';
-import { DEFAULT_SYSTEM_PROMPT } from './types.js';
+import { SITUATION_SUFFIX } from './types.js';
 
 // OpenAI Chat Completions へ渡す messages を構築する純関数
 export function buildChatCompletionMessages(
   system: string | null | undefined,
   history: ConversationMessage[]
-): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
-  const sys = system && system.trim().length > 0 ? system : DEFAULT_SYSTEM_PROMPT;
+): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> | null {
+  if (!system || system.trim().length === 0) {
+    return null;
+  }
+  const sys = `${system}\n${SITUATION_SUFFIX}`;
   const converted = history.map((m) => ({
     role: m.role,
     content: m.content

@@ -31,11 +31,11 @@ import {
   ALLOWED_CHANNEL_IDS,
   type ChannelState,
   type ConversationMessage,
-  DEFAULT_SYSTEM_PROMPT,
   FALLBACK_OPENAI_ERROR,
   MAX_HISTORY,
   OK_EMOJI,
-  RECYCLE_EMOJI
+  RECYCLE_EMOJI,
+  SITUATION_SUFFIX
 } from './discord/types.js';
 
 dotenvConfig();
@@ -141,7 +141,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
     // const embed = new EmbedBuilder().setTitle('現在のシチュエーション').setDescription(situation).setColor(0x00ae86);
-    await interaction.reply(situation);
+    await interaction.reply(`${situation}\n${SITUATION_SUFFIX}`);
     return;
   }
 
@@ -149,8 +149,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // 直近履歴とシステムを取得し、実際にAPIへ投げる messages を構築
     const state = await getChannelState(firestore, channel.id);
     const history = await getRecentConversation(firestore, channel.id, MAX_HISTORY);
-    const system = state?.situation ?? DEFAULT_SYSTEM_PROMPT;
+    const system = state?.situation;
     const messages = buildChatCompletionMessages(system, history);
+
+    if (!messages) {
+      const embed = new EmbedBuilder()
+        .setTitle('次にAPIに投げる会話一覧')
+        .setDescription('シチュエーションが設定されていません。')
+        .setColor(0x888888);
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+      return;
+    }
 
     // 各行を「- role: 先頭20文字（超過時は…）」で1行に整形（行内改行は削除）
     const toOneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').trim();
@@ -189,7 +198,8 @@ async function generateReplyTextByChannel(
     model: openai.chat('cpu'),
     maxOutputTokens: 512,
     messages,
-    temperature: 1
+    temperature: 1,
+    presencePenalty: 1
   });
   return text;
 }
@@ -234,7 +244,14 @@ client.on(Events.MessageCreate, async (message) => {
 
   // 履歴取得
   const history = await getRecentConversation(firestore, message.channelId, MAX_HISTORY);
-  const system = channelState.situation ?? DEFAULT_SYSTEM_PROMPT;
+  const system = channelState.situation;
+
+  if (!system) {
+    await (message.channel as TextChannel).send(
+      'シチュエーションが設定されていません。 `/init` コマンドで設定してください。'
+    );
+    return;
+  }
 
   // タイピング
   try {
@@ -243,6 +260,13 @@ client.on(Events.MessageCreate, async (message) => {
 
   // 返信生成（チャンネル別に OpenAI / Perplexity を切替）
   const payload = buildChatCompletionMessages(system, history);
+  if (!payload) {
+    // 基本的にsystemなしはここで弾かれるが念のため
+    await (message.channel as TextChannel).send(
+      'シチュエーションが設定されていません。 `/init` コマンドで設定してください。'
+    );
+    return;
+  }
   try {
     const text = await generateReplyTextByChannel(message.channelId, payload);
     const replyText = text || '(empty)';
@@ -296,8 +320,15 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     // DBから対象メッセージ以降を削除
     await deleteConversationsAfterDiscordMessageId(firestore, channelId, deleteFromDiscordMessageId);
 
-    const system = (await getChannelState(firestore, channelId))?.situation ?? DEFAULT_SYSTEM_PROMPT;
+    const system = (await getChannelState(firestore, channelId))?.situation;
     const payload = buildChatCompletionMessages(system, nextMessages as ConversationMessage[]);
+
+    if (!payload) {
+      await (msg.channel as TextChannel).send(
+        'シチュエエーションが未設定のため、再生成できません。 `/init` コマンドで設定してください。'
+      );
+      return;
+    }
 
     try {
       await (msg.channel as TextChannel).sendTyping();
