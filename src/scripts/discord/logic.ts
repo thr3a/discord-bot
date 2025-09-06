@@ -12,7 +12,7 @@ export function buildChatCompletionMessages(
   if (!system || system.trim().length === 0) {
     return null;
   }
-  const sys = `${system}\n${SITUATION_SUFFIX}`;
+  const sys = `${system}\n${SITUATION_SUFFIX} /no_think`;
   const converted = history.map((m) => ({
     role: m.role,
     content: m.content
